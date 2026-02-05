@@ -1346,40 +1346,70 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
     return Container(
       decoration: BoxDecoration(
         color: AppColors.white,
-        border: Border(
-          top: BorderSide(color: AppColors.grey200),
-        ),
-      ),
-      child: Row(
-        children: [
-          _buildNavItem('처분신청', 0),
-          _buildNavItem('이전설치', 1),
-          _buildNavItem('신청내역', 2),
-          _buildNavItem('마이', 3),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, -2),
+          ),
         ],
       ),
-    );
-  }
-
-  Widget _buildNavItem(String label, int index) {
-    final isSelected = _currentTab == index;
-    return Expanded(
-      child: GestureDetector(
-        onTap: () => setState(() => _currentTab = index),
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 14),
-          color: Colors.transparent,
-          child: Text(
-            label,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-              color: isSelected ? AppColors.black : AppColors.grey500,
-            ),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Row(
+            children: [
+              _buildNavItem('처분신청', 0, Icons.delete_outline),
+              _buildNavItem('이전설치', 1, Icons.local_shipping_outlined),
+              _buildNavItem('신청내역', 2, Icons.list_alt_outlined),
+              _buildNavItem('마이', 3, Icons.person_outline),
+            ],
           ),
         ),
       ),
     );
+  }
+
+  Widget _buildNavItem(String label, int index, IconData icon) {
+    final isSelected = _currentTab == index;
+    final color = isSelected ? AppColors.primary : AppColors.grey500;
+
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => setState(() => _currentTab = index),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          color: Colors.transparent,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                isSelected ? _getFilledIcon(icon) : icon,
+                size: 24,
+                color: color,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                  color: color,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  IconData _getFilledIcon(IconData outlinedIcon) {
+    if (outlinedIcon == Icons.delete_outline) return Icons.delete;
+    if (outlinedIcon == Icons.local_shipping_outlined) return Icons.local_shipping;
+    if (outlinedIcon == Icons.list_alt_outlined) return Icons.list_alt;
+    if (outlinedIcon == Icons.person_outline) return Icons.person;
+    return outlinedIcon;
   }
 }
