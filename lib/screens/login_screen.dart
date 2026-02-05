@@ -41,22 +41,10 @@ class _LoginScreenState extends State<LoginScreen> {
             // Center logo area
             Expanded(
               child: Center(
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Image.asset(
-                      'assets/images/resit-icon.png',
-                      width: 44,
-                      height: 44,
-                      fit: BoxFit.contain,
-                    ),
-                    const SizedBox(width: 8),
-                    Image.asset(
-                      'assets/images/resit-logo.png',
-                      height: 32,
-                      fit: BoxFit.contain,
-                    ),
-                  ],
+                child: Image.asset(
+                  'assets/images/resit-logo.png',
+                  height: 50,
+                  fit: BoxFit.contain,
                 ),
               ),
             ),
