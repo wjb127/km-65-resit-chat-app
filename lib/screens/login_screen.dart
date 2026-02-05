@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../constants/app_colors.dart';
-import 'chat_list_screen.dart';
+import 'chat_room_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -19,7 +19,13 @@ class _LoginScreenState extends State<LoginScreen> {
       if (mounted) {
         setState(() => _isLoading = false);
         Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const ChatListScreen()),
+          MaterialPageRoute(
+            builder: (_) => const ChatRoomScreen(
+              roomId: 'main',
+              userName: 'RESIT',
+              isOnline: true,
+            ),
+          ),
         );
       }
     });
