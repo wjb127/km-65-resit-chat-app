@@ -53,8 +53,6 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
                 children: [
                   // Show different content based on tab
                   if (_currentTab == 0) ...[
-                    _buildPhotoExampleCard(),
-                    const SizedBox(height: 16),
                     _buildDisposalFormMessage(),
                     const SizedBox(height: 16),
                     _buildUserImageMessage(),
@@ -181,7 +179,6 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
         const SizedBox(width: 8),
         Expanded(
           child: Container(
-            padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               color: const Color(0xFFE8F4FD),
               borderRadius: BorderRadius.circular(16),
@@ -189,89 +186,273 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  '안마의자 상태 사진 3장을 보내주시면\n1일 이내 처분 안내 드리겠습니다.',
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.black,
-                    height: 1.5,
+                // Header with gradient
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        const Color(0xFFE8F4FD),
+                        const Color(0xFFF0F8FF),
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(16),
+                      topRight: Radius.circular(16),
+                    ),
                   ),
-                ),
-                const SizedBox(height: 16),
-
-                // Purchase method
-                _buildFormRow(
-                  '구매 방법',
-                  Row(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _buildRadioOption('카드/현금', _purchaseMethod == '카드/현금', () {
-                        setState(() => _purchaseMethod = '카드/현금');
-                      }),
-                      _buildRadioOption('렌탈 만료', _purchaseMethod == '렌탈 만료', () {
-                        setState(() => _purchaseMethod = '렌탈 만료');
-                      }),
-                      _buildRadioOption('렌탈 계약 중', _purchaseMethod == '렌탈 계약 중', () {
-                        setState(() => _purchaseMethod = '렌탈 계약 중');
-                      }),
+                      Text(
+                        '30초 만에 안마의자 처리하기',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppColors.primary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      RichText(
+                        text: TextSpan(
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.black,
+                            height: 1.4,
+                          ),
+                          children: [
+                            const TextSpan(text: '사진 3장 올려주시면\n'),
+                            TextSpan(
+                              text: '1일 이내',
+                              style: TextStyle(color: AppColors.primary),
+                            ),
+                            const TextSpan(text: '로 연락드립니다.'),
+                          ],
+                        ),
+                      ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 12),
 
-                // Defects
-                _buildFormRow(
-                  '하자 여부',
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
+                // Photo upload section
+                Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 16),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.grey200),
+                  ),
+                  child: Column(
                     children: [
-                      _buildChip('가죽 해짐'),
-                      _buildChip('롤러 이상'),
-                      _buildChip('외관 스크래치'),
-                      _buildChip('에어불량 등'),
+                      Text(
+                        '안마의자 상태 사진 등록',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.grey800,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          _buildUploadSlot('측면', 'assets/images/chair-side.png'),
+                          const SizedBox(width: 8),
+                          _buildUploadSlot('등가죽', 'assets/images/chair-back.png'),
+                          const SizedBox(width: 8),
+                          _buildUploadSlot('다리부', 'assets/images/chair-leg.png'),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        '⚠️ 하자 부위가 있다면 함께 찍어주세요',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: AppColors.grey500,
+                        ),
+                      ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 12),
-
-                // Location
-                _buildFormRow(
-                  '수거 지역',
-                  Text(
-                    '서울 강남구',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: AppColors.grey600,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-
-                // Contact
-                _buildFormRow(
-                  '연락처',
-                  Text(
-                    '010-1234-1234',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: AppColors.grey600,
-                    ),
-                  ),
-                ),
                 const SizedBox(height: 16),
 
-                // Privacy checkbox
-                _buildPrivacyCheckbox(),
-                const SizedBox(height: 16),
+                // Form fields
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Column(
+                    children: [
+                      // Purchase method
+                      _buildFormFieldWithBorder(
+                        '구매 방법',
+                        Row(
+                          children: [
+                            _buildRadioOption('카드/현금', _purchaseMethod == '카드/현금', () {
+                              setState(() => _purchaseMethod = '카드/현금');
+                            }),
+                            _buildRadioOption('렌탈 만료', _purchaseMethod == '렌탈 만료', () {
+                              setState(() => _purchaseMethod = '렌탈 만료');
+                            }),
+                            _buildRadioOption('렌탈 계약 중', _purchaseMethod == '렌탈 계약 중', () {
+                              setState(() => _purchaseMethod = '렌탈 계약 중');
+                            }),
+                          ],
+                        ),
+                      ),
 
-                // Submit button
-                _buildSubmitButton('안마의자 처분 신청'),
+                      // Defects
+                      _buildFormFieldWithBorder(
+                        '하자 여부',
+                        Text(
+                          '가죽 해짐 / 롤러 이상 / 외관 스크래치 / 에어불량 등',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: AppColors.grey500,
+                          ),
+                        ),
+                      ),
+
+                      // Location
+                      _buildFormFieldWithBorder(
+                        '수거 지역',
+                        Text(
+                          '서울 강남구',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: AppColors.grey700,
+                          ),
+                        ),
+                      ),
+
+                      // Contact
+                      _buildFormFieldWithBorder(
+                        '연락처',
+                        Text(
+                          '010-1234-1234',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: AppColors.grey700,
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(height: 12),
+                      _buildPrivacyCheckbox(),
+                      const SizedBox(height: 16),
+                      _buildSubmitButton('안마의자 처분 신청'),
+                      const SizedBox(height: 16),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildUploadSlot(String label, String imagePath) {
+    return Expanded(
+      child: Column(
+        children: [
+          AspectRatio(
+            aspectRatio: 1,
+            child: Container(
+              decoration: BoxDecoration(
+                color: AppColors.grey100,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppColors.grey200),
+              ),
+              child: Stack(
+                children: [
+                  // Background example image
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: Opacity(
+                      opacity: 0.3,
+                      child: Image.asset(
+                        imagePath,
+                        fit: BoxFit.cover,
+                        width: double.infinity,
+                        height: double.infinity,
+                      ),
+                    ),
+                  ),
+                  // Camera icon with plus badge
+                  Center(
+                    child: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        Icon(
+                          Icons.camera_alt_outlined,
+                          size: 28,
+                          color: AppColors.grey500,
+                        ),
+                        Positioned(
+                          right: -6,
+                          top: -6,
+                          child: Container(
+                            width: 16,
+                            height: 16,
+                            decoration: BoxDecoration(
+                              color: AppColors.grey500,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.add,
+                              size: 12,
+                              color: AppColors.white,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              color: AppColors.grey600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFormFieldWithBorder(String label, Widget content) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(color: AppColors.grey200),
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          SizedBox(
+            width: 65,
+            child: Text(
+              label,
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: AppColors.black,
+              ),
+            ),
+          ),
+          Expanded(child: content),
+        ],
+      ),
     );
   }
 
