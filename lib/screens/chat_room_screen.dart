@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../constants/app_colors.dart';
-import '../models/chat_message.dart';
 
 class ChatRoomScreen extends StatefulWidget {
   final String roomId;
@@ -21,116 +20,11 @@ class ChatRoomScreen extends StatefulWidget {
 class _ChatRoomScreenState extends State<ChatRoomScreen> {
   final _messageController = TextEditingController();
   final _scrollController = ScrollController();
-  final List<ChatMessage> _messages = [];
 
-  @override
-  void initState() {
-    super.initState();
-    _loadDummyMessages();
-  }
-
-  void _loadDummyMessages() {
-    _messages.addAll([
-      ChatMessage(
-        id: '1',
-        senderId: 'admin',
-        senderName: widget.userName,
-        text: '안녕하세요! RESIT입니다.\n안마의자 관련 어떤 도움이 필요하신가요?',
-        timestamp: DateTime.now().subtract(const Duration(minutes: 10)),
-        isMe: false,
-      ),
-      ChatMessage(
-        id: '2',
-        senderId: 'user',
-        senderName: '나',
-        text: '안마의자 처분하고 싶은데요',
-        timestamp: DateTime.now().subtract(const Duration(minutes: 8)),
-        isMe: true,
-      ),
-      ChatMessage(
-        id: '3',
-        senderId: 'admin',
-        senderName: widget.userName,
-        text: '네, 안마의자 처분 도와드리겠습니다!\n\n사진을 보내주시면 빠르게 견적 안내드릴 수 있습니다. 측면, 등가죽, 다리부 사진 3장 부탁드립니다.',
-        timestamp: DateTime.now().subtract(const Duration(minutes: 7)),
-        isMe: false,
-      ),
-      ChatMessage(
-        id: '4',
-        senderId: 'user',
-        senderName: '나',
-        text: '브랜드는 바디프랜드이고 3년 정도 사용했습니다',
-        timestamp: DateTime.now().subtract(const Duration(minutes: 5)),
-        isMe: true,
-      ),
-      ChatMessage(
-        id: '5',
-        senderId: 'admin',
-        senderName: widget.userName,
-        text: '바디프랜드 모델이시군요! 모델명도 알 수 있을까요? 의자 옆면에 라벨이 부착되어 있습니다.',
-        timestamp: DateTime.now().subtract(const Duration(minutes: 3)),
-        isMe: false,
-      ),
-    ]);
-  }
-
-  void _sendMessage() {
-    final text = _messageController.text.trim();
-    if (text.isEmpty) return;
-
-    setState(() {
-      _messages.add(ChatMessage(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
-        senderId: 'user',
-        senderName: '나',
-        text: text,
-        timestamp: DateTime.now(),
-        isMe: true,
-      ));
-    });
-
-    _messageController.clear();
-
-    Future.delayed(const Duration(milliseconds: 100), () {
-      _scrollController.animateTo(
-        _scrollController.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeOut,
-      );
-    });
-
-    // Simulate admin reply
-    Future.delayed(const Duration(seconds: 2), () {
-      if (mounted) {
-        setState(() {
-          _messages.add(ChatMessage(
-            id: DateTime.now().millisecondsSinceEpoch.toString(),
-            senderId: 'admin',
-            senderName: widget.userName,
-            text: '확인했습니다! 잠시만 기다려주세요.',
-            timestamp: DateTime.now(),
-            isMe: false,
-          ));
-        });
-
-        Future.delayed(const Duration(milliseconds: 100), () {
-          _scrollController.animateTo(
-            _scrollController.position.maxScrollExtent,
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeOut,
-          );
-        });
-      }
-    });
-  }
-
-  String _formatTime(DateTime time) {
-    final hour = time.hour;
-    final minute = time.minute.toString().padLeft(2, '0');
-    final period = hour < 12 ? '오전' : '오후';
-    final displayHour = hour > 12 ? hour - 12 : (hour == 0 ? 12 : hour);
-    return '$period $displayHour:$minute';
-  }
+  // Form state
+  String _purchaseMethod = '카드/현금';
+  final List<String> _selectedDefects = [];
+  bool _privacyAgreed = false;
 
   @override
   void dispose() {
@@ -143,259 +37,541 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        backgroundColor: AppColors.white,
-        elevation: 0,
-        scrolledUnderElevation: 0.5,
-        leading: IconButton(
-          onPressed: () => Navigator.of(context).pop(),
-          icon: const Icon(Icons.arrow_back_ios, size: 20, color: AppColors.black),
-        ),
-        title: Row(
+      body: SafeArea(
+        child: Column(
           children: [
-            Stack(
-              children: [
-                Image.asset(
-                  'assets/images/resit-icon.png',
-                  width: 36,
-                  height: 36,
-                  fit: BoxFit.contain,
-                ),
-                if (widget.isOnline)
-                  Positioned(
-                    right: 0,
-                    bottom: 0,
-                    child: Container(
-                      width: 10,
-                      height: 10,
-                      decoration: BoxDecoration(
-                        color: AppColors.online,
-                        shape: BoxShape.circle,
-                        border: Border.all(color: AppColors.white, width: 1.5),
-                      ),
-                    ),
-                  ),
-              ],
+            // Chat messages
+            Expanded(
+              child: ListView(
+                controller: _scrollController,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                children: [
+                  // Photo example card
+                  _buildPhotoExampleCard(),
+                  const SizedBox(height: 16),
+
+                  // Bot message with form
+                  _buildBotFormMessage(),
+                  const SizedBox(height: 16),
+
+                  // User image message
+                  _buildUserImageMessage(),
+                  const SizedBox(height: 12),
+
+                  // User text message
+                  _buildUserTextMessage('안마의자 처분 신청 합니다.'),
+                ],
+              ),
             ),
-            const SizedBox(width: 10),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  widget.userName,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.black,
-                  ),
-                ),
-                Text(
-                  widget.isOnline ? '상담 가능' : '오프라인',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: widget.isOnline ? AppColors.online : AppColors.grey400,
-                  ),
-                ),
-              ],
-            ),
+
+            // Input bar
+            _buildInputBar(),
+
+            // Bottom navigation
+            _buildBottomNavigation(),
           ],
         ),
-        actions: [
-          IconButton(
-            onPressed: () {},
-            icon: const Icon(Icons.more_vert, color: AppColors.grey800),
+      ),
+    );
+  }
+
+  Widget _buildPhotoExampleCard() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.grey200),
+      ),
+      child: Column(
+        children: [
+          Text(
+            '사진 촬영 예시',
+            style: TextStyle(
+              fontSize: 14,
+              color: AppColors.grey600,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              _buildExamplePhoto('옆면'),
+              const SizedBox(width: 8),
+              _buildExamplePhoto('등가죽'),
+              const SizedBox(width: 8),
+              _buildExamplePhoto('다리'),
+            ],
           ),
         ],
       ),
-      body: Column(
+    );
+  }
+
+  Widget _buildExamplePhoto(String label) {
+    return Expanded(
+      child: Column(
         children: [
-          // Messages
-          Expanded(
-            child: ListView.builder(
-              controller: _scrollController,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-              itemCount: _messages.length,
-              itemBuilder: (context, index) {
-                final message = _messages[index];
-                return _MessageBubble(
-                  message: message,
-                  timeText: _formatTime(message.timestamp),
-                );
-              },
+          AspectRatio(
+            aspectRatio: 1,
+            child: Container(
+              decoration: BoxDecoration(
+                color: AppColors.grey100,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(
+                Icons.chair,
+                size: 40,
+                color: AppColors.grey400,
+              ),
             ),
           ),
-
-          // Input bar
-          Container(
-            padding: EdgeInsets.only(
-              left: 16,
-              right: 8,
-              top: 10,
-              bottom: MediaQuery.of(context).padding.bottom + 10,
-            ),
-            decoration: BoxDecoration(
-              color: AppColors.white,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.05),
-                  blurRadius: 10,
-                  offset: const Offset(0, -2),
-                ),
-              ],
-            ),
-            child: Row(
-              children: [
-                // Attachment button
-                IconButton(
-                  onPressed: () {},
-                  icon: const Icon(Icons.add_circle_outline,
-                      color: AppColors.grey400, size: 28),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-                ),
-                // Camera button
-                IconButton(
-                  onPressed: () {},
-                  icon: const Icon(Icons.camera_alt_outlined,
-                      color: AppColors.grey400, size: 26),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-                ),
-                const SizedBox(width: 4),
-
-                // Text field
-                Expanded(
-                  child: Container(
-                    constraints: const BoxConstraints(maxHeight: 100),
-                    decoration: BoxDecoration(
-                      color: AppColors.grey100,
-                      borderRadius: BorderRadius.circular(22),
-                    ),
-                    child: TextField(
-                      controller: _messageController,
-                      maxLines: null,
-                      style: const TextStyle(fontSize: 15, color: AppColors.black),
-                      decoration: InputDecoration(
-                        hintText: '메시지를 입력하세요',
-                        hintStyle: TextStyle(
-                          color: AppColors.grey400,
-                          fontSize: 15,
-                        ),
-                        border: InputBorder.none,
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 10,
-                        ),
-                      ),
-                      textInputAction: TextInputAction.send,
-                      onSubmitted: (_) => _sendMessage(),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 4),
-
-                // Send button
-                IconButton(
-                  onPressed: _sendMessage,
-                  icon: Container(
-                    width: 36,
-                    height: 36,
-                    decoration: const BoxDecoration(
-                      color: AppColors.primary,
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(Icons.arrow_upward,
-                        color: AppColors.white, size: 20),
-                  ),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-                ),
-              ],
+          const SizedBox(height: 6),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              color: AppColors.grey600,
             ),
           ),
         ],
       ),
     );
   }
-}
 
-class _MessageBubble extends StatelessWidget {
-  final ChatMessage message;
-  final String timeText;
-
-  const _MessageBubble({
-    required this.message,
-    required this.timeText,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Row(
-        mainAxisAlignment:
-            message.isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          if (!message.isMe) ...[
-            Image.asset(
-              'assets/images/resit-icon.png',
-              width: 32,
-              height: 32,
-              fit: BoxFit.contain,
+  Widget _buildBotFormMessage() {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Image.asset(
+          'assets/images/resit-icon.png',
+          width: 36,
+          height: 36,
+          fit: BoxFit.contain,
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: const Color(0xFFE8F4FD),
+              borderRadius: BorderRadius.circular(16),
             ),
-            const SizedBox(width: 8),
-          ],
-
-          if (message.isMe)
-            Padding(
-              padding: const EdgeInsets.only(right: 6, bottom: 2),
-              child: Text(
-                timeText,
-                style: TextStyle(fontSize: 11, color: AppColors.grey400),
-              ),
-            ),
-
-          Flexible(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              decoration: BoxDecoration(
-                color: message.isMe ? AppColors.primary : AppColors.white,
-                borderRadius: BorderRadius.only(
-                  topLeft: const Radius.circular(18),
-                  topRight: const Radius.circular(18),
-                  bottomLeft: Radius.circular(message.isMe ? 18 : 4),
-                  bottomRight: Radius.circular(message.isMe ? 4 : 18),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  '안마의자 상태 사진 3장을 보내주시면\n1일 이내 처분 안내 드리겠습니다.',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.black,
+                    height: 1.5,
+                  ),
                 ),
-                boxShadow: [
-                  if (!message.isMe)
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.04),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
+                const SizedBox(height: 16),
+
+                // Purchase method
+                _buildFormRow(
+                  '구매 방법',
+                  Row(
+                    children: [
+                      _buildRadioOption('카드/현금', _purchaseMethod == '카드/현금', () {
+                        setState(() => _purchaseMethod = '카드/현금');
+                      }),
+                      _buildRadioOption('렌탈 만료', _purchaseMethod == '렌탈 만료', () {
+                        setState(() => _purchaseMethod = '렌탈 만료');
+                      }),
+                      _buildRadioOption('렌탈 계약 중', _purchaseMethod == '렌탈 계약 중', () {
+                        setState(() => _purchaseMethod = '렌탈 계약 중');
+                      }),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                // Defects
+                _buildFormRow(
+                  '하자 여부',
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      _buildChip('가죽 해짐'),
+                      _buildChip('롤러 이상'),
+                      _buildChip('외관 스크래치'),
+                      _buildChip('에어불량 등'),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                // Location
+                _buildFormRow(
+                  '수거 지역',
+                  Text(
+                    '서울 강남구',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: AppColors.grey600,
                     ),
-                ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                // Contact
+                _buildFormRow(
+                  '연락처',
+                  Text(
+                    '010-1234-1234',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: AppColors.grey600,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Privacy checkbox
+                Row(
+                  children: [
+                    SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: Checkbox(
+                        value: _privacyAgreed,
+                        onChanged: (v) => setState(() => _privacyAgreed = v ?? false),
+                        shape: const CircleBorder(),
+                        activeColor: AppColors.primary,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      '개인정보 수집/이용 동의',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: AppColors.grey800,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      '보기 ▼',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppColors.primary,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+
+                // Submit button
+                SizedBox(
+                  width: double.infinity,
+                  height: 44,
+                  child: ElevatedButton(
+                    onPressed: () {},
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF7C4DFF),
+                      foregroundColor: AppColors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      elevation: 0,
+                    ),
+                    child: const Text(
+                      '안마의자 처분 신청',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFormRow(String label, Widget content) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 60,
+          child: Text(
+            label,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: AppColors.black,
+            ),
+          ),
+        ),
+        Expanded(child: content),
+      ],
+    );
+  }
+
+  Widget _buildRadioOption(String label, bool selected, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 16,
+            height: 16,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: selected ? AppColors.primary : AppColors.grey400,
+                width: 1.5,
               ),
-              child: Text(
-                message.text,
-                style: TextStyle(
-                  fontSize: 14,
-                  color: message.isMe ? AppColors.white : AppColors.black,
-                  height: 1.5,
+            ),
+            child: selected
+                ? Center(
+                    child: Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: AppColors.primary,
+                      ),
+                    ),
+                  )
+                : null,
+          ),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              color: selected ? AppColors.black : AppColors.grey600,
+            ),
+          ),
+          const SizedBox(width: 8),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildChip(String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.grey300),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 11,
+          color: AppColors.grey700,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildUserImageMessage() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Flexible(
+          child: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: AppColors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.grey200),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildImageThumbnail(),
+                const SizedBox(width: 6),
+                _buildImageThumbnail(),
+                const SizedBox(width: 6),
+                _buildImageThumbnail(),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(20),
+          child: Container(
+            width: 36,
+            height: 36,
+            color: AppColors.grey200,
+            child: Icon(Icons.person, color: AppColors.grey400, size: 24),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildImageThumbnail() {
+    return Container(
+      width: 80,
+      height: 80,
+      decoration: BoxDecoration(
+        color: AppColors.grey100,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Icon(
+        Icons.chair,
+        size: 32,
+        color: AppColors.grey400,
+      ),
+    );
+  }
+
+  Widget _buildUserTextMessage(String text) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.end,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Flexible(
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: AppColors.grey200,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text(
+              text,
+              style: const TextStyle(
+                fontSize: 14,
+                color: AppColors.black,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(20),
+          child: Container(
+            width: 36,
+            height: 36,
+            color: AppColors.grey200,
+            child: Icon(Icons.person, color: AppColors.grey400, size: 24),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildInputBar() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        border: Border(
+          top: BorderSide(color: AppColors.grey200),
+        ),
+      ),
+      child: Row(
+        children: [
+          // Gallery icon
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              border: Border.all(color: AppColors.grey300),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(
+              Icons.image_outlined,
+              color: AppColors.grey500,
+              size: 22,
+            ),
+          ),
+          const SizedBox(width: 12),
+
+          // Text input
+          Expanded(
+            child: Container(
+              height: 44,
+              decoration: BoxDecoration(
+                border: Border.all(color: AppColors.grey300),
+                borderRadius: BorderRadius.circular(22),
+              ),
+              child: TextField(
+                controller: _messageController,
+                style: const TextStyle(fontSize: 14, color: AppColors.black),
+                decoration: InputDecoration(
+                  hintText: '안마의자 처분 상담을 받아보세요.',
+                  hintStyle: TextStyle(
+                    color: AppColors.grey400,
+                    fontSize: 14,
+                  ),
+                  border: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
                 ),
               ),
             ),
           ),
+          const SizedBox(width: 12),
 
-          if (!message.isMe)
-            Padding(
-              padding: const EdgeInsets.only(left: 6, bottom: 2),
-              child: Text(
-                timeText,
-                style: TextStyle(fontSize: 11, color: AppColors.grey400),
-              ),
+          // Send button
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(color: const Color(0xFF7C4DFF), width: 2),
             ),
+            child: const Icon(
+              Icons.arrow_upward,
+              color: Color(0xFF7C4DFF),
+              size: 22,
+            ),
+          ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildBottomNavigation() {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        border: Border(
+          top: BorderSide(color: AppColors.grey200),
+        ),
+      ),
+      child: Row(
+        children: [
+          _buildNavItem('처분신청', true),
+          _buildNavItem('이전설치', false),
+          _buildNavItem('신청내역', false),
+          _buildNavItem('마이', false),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNavItem(String label, bool isSelected) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        child: Text(
+          label,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+            color: isSelected ? AppColors.black : AppColors.grey500,
+          ),
+        ),
       ),
     );
   }
