@@ -121,6 +121,21 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
   }
 
   Widget _buildExamplePhoto(String label) {
+    String imagePath;
+    switch (label) {
+      case '옆면':
+        imagePath = 'assets/images/chair-side.png';
+        break;
+      case '등가죽':
+        imagePath = 'assets/images/chair-back.png';
+        break;
+      case '다리':
+        imagePath = 'assets/images/chair-leg.png';
+        break;
+      default:
+        imagePath = 'assets/images/chair-side.png';
+    }
+
     return Expanded(
       child: Column(
         children: [
@@ -131,10 +146,12 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
                 color: AppColors.grey100,
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: Icon(
-                Icons.chair,
-                size: 40,
-                color: AppColors.grey400,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Image.asset(
+                  imagePath,
+                  fit: BoxFit.cover,
+                ),
               ),
             ),
           ),
@@ -426,6 +443,10 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
   }
 
   Widget _buildRelocationPhoto(String label) {
+    String imagePath = label == '앞면'
+        ? 'assets/images/chair-side.png'
+        : 'assets/images/chair-back.png';
+
     return Column(
       children: [
         AspectRatio(
@@ -436,10 +457,12 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
               borderRadius: BorderRadius.circular(8),
               border: Border.all(color: AppColors.grey200),
             ),
-            child: Icon(
-              Icons.chair,
-              size: 36,
-              color: AppColors.grey400,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Image.asset(
+                imagePath,
+                fit: BoxFit.cover,
+              ),
             ),
           ),
         ),
@@ -636,11 +659,11 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                _buildImageThumbnail(),
+                _buildImageThumbnail('assets/images/chair-side.png'),
                 const SizedBox(width: 6),
-                _buildImageThumbnail(),
+                _buildImageThumbnail('assets/images/chair-back.png'),
                 const SizedBox(width: 6),
-                _buildImageThumbnail(),
+                _buildImageThumbnail('assets/images/chair-leg.png'),
               ],
             ),
           ),
@@ -651,7 +674,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
     );
   }
 
-  Widget _buildImageThumbnail() {
+  Widget _buildImageThumbnail(String imagePath) {
     return Container(
       width: 80,
       height: 80,
@@ -659,10 +682,12 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
         color: AppColors.grey100,
         borderRadius: BorderRadius.circular(8),
       ),
-      child: Icon(
-        Icons.chair,
-        size: 32,
-        color: AppColors.grey400,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: Image.asset(
+          imagePath,
+          fit: BoxFit.cover,
+        ),
       ),
     );
   }
