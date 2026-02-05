@@ -21,10 +21,15 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
   final _messageController = TextEditingController();
   final _scrollController = ScrollController();
 
-  // Form state
+  // Current tab: 0=처분신청, 1=이전설치, 2=신청내역, 3=마이
+  int _currentTab = 0;
+
+  // 처분신청 form state
   String _purchaseMethod = '카드/현금';
-  final List<String> _selectedDefects = [];
   bool _privacyAgreed = false;
+
+  // 이전설치 form state
+  String _elevatorOption = '양쪽 다 있음';
 
   @override
   void dispose() {
@@ -46,12 +51,14 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
                 controller: _scrollController,
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
                 children: [
-                  // Photo example card
-                  _buildPhotoExampleCard(),
-                  const SizedBox(height: 16),
-
-                  // Bot message with form
-                  _buildBotFormMessage(),
+                  // Show different form based on tab
+                  if (_currentTab == 0) ...[
+                    _buildPhotoExampleCard(),
+                    const SizedBox(height: 16),
+                    _buildDisposalFormMessage(),
+                  ] else if (_currentTab == 1) ...[
+                    _buildRelocationFormMessage(),
+                  ],
                   const SizedBox(height: 16),
 
                   // User image message
@@ -59,7 +66,9 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
                   const SizedBox(height: 12),
 
                   // User text message
-                  _buildUserTextMessage('안마의자 처분 신청 합니다.'),
+                  _buildUserTextMessage(
+                    _currentTab == 0 ? '안마의자 처분 신청 합니다.' : '안마의자 이전 신청 합니다.',
+                  ),
                 ],
               ),
             ),
@@ -74,6 +83,8 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
       ),
     );
   }
+
+  // ============ 처분신청 Widgets ============
 
   Widget _buildPhotoExampleCard() {
     return Container(
@@ -138,7 +149,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
     );
   }
 
-  Widget _buildBotFormMessage() {
+  Widget _buildDisposalFormMessage() {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -232,59 +243,176 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
                 const SizedBox(height: 16),
 
                 // Privacy checkbox
-                Row(
-                  children: [
-                    SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: Checkbox(
-                        value: _privacyAgreed,
-                        onChanged: (v) => setState(() => _privacyAgreed = v ?? false),
-                        shape: const CircleBorder(),
-                        activeColor: AppColors.primary,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      '개인정보 수집/이용 동의',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: AppColors.grey800,
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      '보기 ▼',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: AppColors.primary,
-                      ),
-                    ),
-                  ],
-                ),
+                _buildPrivacyCheckbox(),
                 const SizedBox(height: 16),
 
                 // Submit button
-                SizedBox(
-                  width: double.infinity,
-                  height: 44,
-                  child: ElevatedButton(
-                    onPressed: () {},
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF7C4DFF),
-                      foregroundColor: AppColors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      elevation: 0,
+                _buildSubmitButton('안마의자 처분 신청'),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ============ 이전설치 Widgets ============
+
+  Widget _buildRelocationFormMessage() {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Image.asset(
+          'assets/images/resit-icon.png',
+          width: 36,
+          height: 36,
+          fit: BoxFit.contain,
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Container(
+            decoration: BoxDecoration(
+              color: const Color(0xFFE8F4FD),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Gradient header
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        const Color(0xFFE8F4FD),
+                        const Color(0xFFF5E6FF),
+                      ],
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
                     ),
-                    child: const Text(
-                      '안마의자 처분 신청',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                      ),
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(16),
+                      topRight: Radius.circular(16),
                     ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '2분만에 이전 신청하기',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppColors.primary,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      RichText(
+                        text: TextSpan(
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.black,
+                            height: 1.4,
+                          ),
+                          children: [
+                            const TextSpan(text: '주소를 기재해주시면\n'),
+                            TextSpan(
+                              text: '2시간 이내',
+                              style: TextStyle(color: AppColors.primary),
+                            ),
+                            const TextSpan(text: '로 연락드립니다.'),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Photo examples
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Column(
+                    children: [
+                      const SizedBox(height: 12),
+                      Text(
+                        '안마의자 사진',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppColors.grey600,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(child: _buildRelocationPhoto('앞면')),
+                          const SizedBox(width: 12),
+                          Expanded(child: _buildRelocationPhoto('정면')),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Form fields
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Column(
+                    children: [
+                      _buildFormRow(
+                        '출발지',
+                        Text(
+                          '서울 강남구 신사동 OO아파트',
+                          style: TextStyle(fontSize: 13, color: AppColors.grey600),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      _buildFormRow(
+                        '도착지',
+                        Text(
+                          '부산 해운대구 좌동 OO아파트',
+                          style: TextStyle(fontSize: 13, color: AppColors.grey600),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      _buildFormRow(
+                        '모델명',
+                        Text(
+                          '바디프랜드 팬텀 / 모델명 모름',
+                          style: TextStyle(fontSize: 13, color: AppColors.grey600),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      _buildFormRow(
+                        '엘리베이터\n여부',
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          children: [
+                            _buildSelectableChip('양쪽 다 있음', _elevatorOption == '양쪽 다 있음', () {
+                              setState(() => _elevatorOption = '양쪽 다 있음');
+                            }),
+                            _buildSelectableChip('출발지만 있음', _elevatorOption == '출발지만 있음', () {
+                              setState(() => _elevatorOption = '출발지만 있음');
+                            }),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      _buildFormRow(
+                        '연락처',
+                        Text(
+                          '010-1234-1234',
+                          style: TextStyle(fontSize: 13, color: AppColors.grey600),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      _buildPrivacyCheckbox(),
+                      const SizedBox(height: 16),
+                      _buildSubmitButton('안마의자 이전 신청'),
+                      const SizedBox(height: 16),
+                    ],
                   ),
                 ),
               ],
@@ -295,18 +423,51 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
     );
   }
 
+  Widget _buildRelocationPhoto(String label) {
+    return Column(
+      children: [
+        AspectRatio(
+          aspectRatio: 1.2,
+          child: Container(
+            decoration: BoxDecoration(
+              color: AppColors.white,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: AppColors.grey200),
+            ),
+            child: Icon(
+              Icons.chair,
+              size: 36,
+              color: AppColors.grey400,
+            ),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            color: AppColors.grey600,
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ============ Shared Widgets ============
+
   Widget _buildFormRow(String label, Widget content) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SizedBox(
-          width: 60,
+          width: 70,
           child: Text(
             label,
             style: const TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w600,
               color: AppColors.black,
+              height: 1.3,
             ),
           ),
         ),
@@ -348,11 +509,11 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
           Text(
             label,
             style: TextStyle(
-              fontSize: 12,
+              fontSize: 11,
               color: selected ? AppColors.black : AppColors.grey600,
             ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 6),
         ],
       ),
     );
@@ -371,6 +532,87 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
         style: TextStyle(
           fontSize: 11,
           color: AppColors.grey700,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSelectableChip(String label, bool selected, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: selected ? AppColors.primary.withValues(alpha: 0.1) : AppColors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: selected ? AppColors.primary : AppColors.grey300,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            color: selected ? AppColors.primary : AppColors.grey700,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPrivacyCheckbox() {
+    return Row(
+      children: [
+        SizedBox(
+          width: 20,
+          height: 20,
+          child: Checkbox(
+            value: _privacyAgreed,
+            onChanged: (v) => setState(() => _privacyAgreed = v ?? false),
+            shape: const CircleBorder(),
+            activeColor: AppColors.primary,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          '개인정보 수집/이용 동의',
+          style: TextStyle(
+            fontSize: 13,
+            color: AppColors.grey800,
+          ),
+        ),
+        const SizedBox(width: 4),
+        Text(
+          '보기 ▼',
+          style: TextStyle(
+            fontSize: 12,
+            color: AppColors.primary,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSubmitButton(String text) {
+    return SizedBox(
+      width: double.infinity,
+      height: 44,
+      child: ElevatedButton(
+        onPressed: () {},
+        style: ElevatedButton.styleFrom(
+          backgroundColor: const Color(0xFF7C4DFF),
+          foregroundColor: AppColors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+          elevation: 0,
+        ),
+        child: Text(
+          text,
+          style: const TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+          ),
         ),
       ),
     );
@@ -402,15 +644,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
           ),
         ),
         const SizedBox(width: 8),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(20),
-          child: Container(
-            width: 36,
-            height: 36,
-            color: AppColors.grey200,
-            child: Icon(Icons.person, color: AppColors.grey400, size: 24),
-          ),
-        ),
+        _buildUserAvatar(),
       ],
     );
   }
@@ -453,16 +687,30 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
           ),
         ),
         const SizedBox(width: 8),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(20),
-          child: Container(
-            width: 36,
-            height: 36,
-            color: AppColors.grey200,
-            child: Icon(Icons.person, color: AppColors.grey400, size: 24),
+        _buildUserAvatar(),
+      ],
+    );
+  }
+
+  Widget _buildUserAvatar() {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        width: 36,
+        height: 36,
+        color: const Color(0xFFFFE4C9),
+        child: Image.asset(
+          'assets/images/resit-icon.png',
+          width: 24,
+          height: 24,
+          fit: BoxFit.contain,
+          errorBuilder: (_, __, ___) => Icon(
+            Icons.person,
+            color: AppColors.grey400,
+            size: 24,
           ),
         ),
-      ],
+      ),
     );
   }
 
@@ -550,26 +798,31 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
       ),
       child: Row(
         children: [
-          _buildNavItem('처분신청', true),
-          _buildNavItem('이전설치', false),
-          _buildNavItem('신청내역', false),
-          _buildNavItem('마이', false),
+          _buildNavItem('처분신청', 0),
+          _buildNavItem('이전설치', 1),
+          _buildNavItem('신청내역', 2),
+          _buildNavItem('마이', 3),
         ],
       ),
     );
   }
 
-  Widget _buildNavItem(String label, bool isSelected) {
+  Widget _buildNavItem(String label, int index) {
+    final isSelected = _currentTab == index;
     return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 14),
-        child: Text(
-          label,
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-            color: isSelected ? AppColors.black : AppColors.grey500,
+      child: GestureDetector(
+        onTap: () => setState(() => _currentTab = index),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          color: Colors.transparent,
+          child: Text(
+            label,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+              color: isSelected ? AppColors.black : AppColors.grey500,
+            ),
           ),
         ),
       ),
