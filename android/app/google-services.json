@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "452169253977",
+    "project_id": "resit-app-50f35",
+    "storage_bucket": "resit-app-50f35.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:452169253977:android:9672d99d6a3fd48fad9d48",
+        "android_client_info": {
+          "package_name": "com.resit.resit"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB968NbGPyuB4cQFrBqfKbrLbdBhQdt7yc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

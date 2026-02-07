@@ -1,19 +1,28 @@
+enum MessageType { text, image, system }
+
 class ChatMessage {
   final String id;
   final String senderId;
   final String senderName;
-  final String text;
+  final String content;
   final DateTime timestamp;
   final bool isMe;
+  final String? imageUrl;
+  final MessageType type;
 
   ChatMessage({
     required this.id,
     required this.senderId,
-    required this.senderName,
-    required this.text,
+    this.senderName = '',
+    required this.content,
     required this.timestamp,
     required this.isMe,
+    this.imageUrl,
+    this.type = MessageType.text,
   });
+
+  // Alias for backward compatibility
+  String get text => content;
 }
 
 class ChatRoom {

@@ -1,0 +1,9 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // 테스트 모드: 모든 읽기/쓰기 허용 (30일 후 수정 필요)
+    match /{allPaths=**} {
+      allow read, write: if request.time < timestamp.date(2026, 3, 9);
+    }
+  }
+}

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../constants/app_colors.dart';
+import 'chat_tab_screen.dart';
 
 class ChatRoomScreen extends StatefulWidget {
   final String roomId;
@@ -21,7 +22,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
   final _messageController = TextEditingController();
   final _scrollController = ScrollController();
 
-  // Current tab: 0=처분신청, 1=이전설치, 2=신청내역, 3=마이
+  // Current tab: 0=채팅, 1=처분신청, 2=이전설치, 3=신청내역, 4=마이
   int _currentTab = 0;
 
   // 처분신청 form state
@@ -45,36 +46,39 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            // Chat messages
-            Expanded(
-              child: ListView(
-                controller: _scrollController,
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                children: [
-                  // Show different content based on tab
-                  if (_currentTab == 0) ...[
-                    _buildDisposalFormMessage(),
-                    const SizedBox(height: 16),
-                    _buildUserImageMessage(),
-                    const SizedBox(height: 12),
-                    _buildUserTextMessage('안마의자 처분 신청 합니다.'),
-                  ] else if (_currentTab == 1) ...[
-                    _buildRelocationFormMessage(),
-                    const SizedBox(height: 16),
-                    _buildUserImageMessage(),
-                    const SizedBox(height: 12),
-                    _buildUserTextMessage('안마의자 이전 신청 합니다.'),
-                  ] else if (_currentTab == 2) ...[
-                    _buildHistoryTab(),
-                  ] else if (_currentTab == 3) ...[
-                    _buildMyPageTab(),
+            // 탭 0 = 채팅 (별도 화면)
+            if (_currentTab == 0)
+              const Expanded(child: ChatTabScreen())
+            else
+              Expanded(
+                child: ListView(
+                  controller: _scrollController,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                  children: [
+                    // Show different content based on tab
+                    if (_currentTab == 1) ...[
+                      _buildDisposalFormMessage(),
+                      const SizedBox(height: 16),
+                      _buildUserImageMessage(),
+                      const SizedBox(height: 12),
+                      _buildUserTextMessage('안마의자 처분 신청 합니다.'),
+                    ] else if (_currentTab == 2) ...[
+                      _buildRelocationFormMessage(),
+                      const SizedBox(height: 16),
+                      _buildUserImageMessage(),
+                      const SizedBox(height: 12),
+                      _buildUserTextMessage('안마의자 이전 신청 합니다.'),
+                    ] else if (_currentTab == 3) ...[
+                      _buildHistoryTab(),
+                    ] else if (_currentTab == 4) ...[
+                      _buildMyPageTab(),
+                    ],
                   ],
-                ],
+                ),
               ),
-            ),
 
-            // Input bar (only for chat tabs)
-            if (_currentTab == 0 || _currentTab == 1) _buildInputBar(),
+            // Input bar (only for form tabs)
+            if (_currentTab == 1 || _currentTab == 2) _buildInputBar(),
 
             // Bottom navigation
             _buildBottomNavigation(),
@@ -1360,10 +1364,11 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
           padding: const EdgeInsets.symmetric(vertical: 8),
           child: Row(
             children: [
-              _buildNavItem('처분신청', 0, Icons.delete_outline),
-              _buildNavItem('이전설치', 1, Icons.local_shipping_outlined),
-              _buildNavItem('신청내역', 2, Icons.list_alt_outlined),
-              _buildNavItem('마이', 3, Icons.person_outline),
+              _buildNavItem('채팅', 0, Icons.chat_bubble_outline),
+              _buildNavItem('처분신청', 1, Icons.delete_outline),
+              _buildNavItem('이전설치', 2, Icons.local_shipping_outlined),
+              _buildNavItem('신청내역', 3, Icons.list_alt_outlined),
+              _buildNavItem('마이', 4, Icons.person_outline),
             ],
           ),
         ),
@@ -1406,6 +1411,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
   }
 
   IconData _getFilledIcon(IconData outlinedIcon) {
+    if (outlinedIcon == Icons.chat_bubble_outline) return Icons.chat_bubble;
     if (outlinedIcon == Icons.delete_outline) return Icons.delete;
     if (outlinedIcon == Icons.local_shipping_outlined) return Icons.local_shipping;
     if (outlinedIcon == Icons.list_alt_outlined) return Icons.list_alt;
