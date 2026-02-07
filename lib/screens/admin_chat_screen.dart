@@ -263,7 +263,23 @@ class _AdminChatScreenState extends State<AdminChatScreen> {
   Widget _buildChatRoomTile(String roomId, Map<String, dynamic> data) {
     final lastMessage = data['lastMessage'] as String? ?? '';
     final lastMessageTime = data['lastMessageTime'] as Timestamp?;
+    final chatType = data['type'] as String? ?? 'general';
+    final status = data['status'] as String? ?? 'pending';
     final isSelected = _selectedChatRoomId == roomId;
+
+    // 채팅 타입에 따른 배지 색상
+    Color typeColor;
+    String typeLabel;
+    if (chatType == 'disposal') {
+      typeColor = AppColors.primary;
+      typeLabel = '처분';
+    } else if (chatType == 'relocation') {
+      typeColor = const Color(0xFF7C4DFF);
+      typeLabel = '이전';
+    } else {
+      typeColor = AppColors.grey500;
+      typeLabel = '일반';
+    }
 
     return InkWell(
       onTap: () {
@@ -294,6 +310,23 @@ class _AdminChatScreenState extends State<AdminChatScreen> {
                 children: [
                   Row(
                     children: [
+                      // 채팅 타입 배지
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: typeColor.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          typeLabel,
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            color: typeColor,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
                       Text(
                         '고객',
                         style: TextStyle(
@@ -314,14 +347,30 @@ class _AdminChatScreenState extends State<AdminChatScreen> {
                     ],
                   ),
                   const SizedBox(height: 4),
-                  Text(
-                    lastMessage,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: AppColors.grey600,
-                    ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          lastMessage,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: AppColors.grey600,
+                          ),
+                        ),
+                      ),
+                      // 상태 표시
+                      if (status == 'pending')
+                        Container(
+                          width: 8,
+                          height: 8,
+                          decoration: BoxDecoration(
+                            color: Colors.orange,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                    ],
                   ),
                 ],
               ),
