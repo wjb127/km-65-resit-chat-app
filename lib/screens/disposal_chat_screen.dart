@@ -52,36 +52,55 @@ class _DisposalChatScreenState extends State<DisposalChatScreen> {
       return;
     }
 
-    // 기존 처분신청 채팅방 찾기
-    final existingRoom = await _firestore
-        .collection('chats')
-        .where('userId', isEqualTo: user.uid)
-        .where('type', isEqualTo: 'disposal')
-        .where('status', whereIn: ['pending', 'inProgress'])
-        .orderBy('createdAt', descending: true)
-        .limit(1)
-        .get();
+    try {
+      // 간단한 쿼리로 변경 (복합 인덱스 불필요)
+      final existingRooms = await _firestore
+          .collection('chats')
+          .where('userId', isEqualTo: user.uid)
+          .where('type', isEqualTo: 'disposal')
+          .get()
+          .timeout(const Duration(seconds: 5));
 
-    if (existingRoom.docs.isNotEmpty) {
-      final doc = existingRoom.docs.first;
-      _chatRoomId = doc.id;
-      final data = doc.data();
-      _isSubmitted = data['formSubmitted'] ?? false;
+      // 클라이언트에서 필터링
+      final activeRooms = existingRooms.docs.where((doc) {
+        final status = doc.data()['status'] as String?;
+        return status == 'pending' || status == 'inProgress';
+      }).toList();
 
-      // 기존 폼 데이터 복원
-      if (data['formData'] != null) {
-        final formData = data['formData'] as Map<String, dynamic>;
-        _uploadedPhotos = List<String>.from(formData['photos'] ?? []);
-        _photoSlots = List<String?>.from(_uploadedPhotos);
-        while (_photoSlots.length < 3) _photoSlots.add(null);
-        _purchaseMethod = formData['purchaseMethod'] ?? '카드/현금';
-        _selectedDefects = List<String>.from(formData['defects'] ?? []);
-        _locationController.text = formData['location'] ?? '';
-        _contactController.text = formData['contact'] ?? '';
+      // 가장 최근 것 선택
+      if (activeRooms.isNotEmpty) {
+        activeRooms.sort((a, b) {
+          final aTime = a.data()['createdAt'] as Timestamp?;
+          final bTime = b.data()['createdAt'] as Timestamp?;
+          if (aTime == null || bTime == null) return 0;
+          return bTime.compareTo(aTime);
+        });
+
+        final doc = activeRooms.first;
+        _chatRoomId = doc.id;
+        final data = doc.data();
+        _isSubmitted = data['formSubmitted'] ?? false;
+
+        // 기존 폼 데이터 복원
+        if (data['formData'] != null) {
+          final formData = data['formData'] as Map<String, dynamic>;
+          _uploadedPhotos = List<String>.from(formData['photos'] ?? []);
+          _photoSlots = List<String?>.from(_uploadedPhotos);
+          while (_photoSlots.length < 3) _photoSlots.add(null);
+          _purchaseMethod = formData['purchaseMethod'] ?? '카드/현금';
+          _selectedDefects = List<String>.from(formData['defects'] ?? []);
+          _locationController.text = formData['location'] ?? '';
+          _contactController.text = formData['contact'] ?? '';
+        }
       }
+    } catch (e) {
+      // 타임아웃이나 에러 시 그냥 새 폼으로 시작
+      debugPrint('채팅방 조회 실패: $e');
     }
 
-    setState(() => _isLoading = false);
+    if (mounted) {
+      setState(() => _isLoading = false);
+    }
   }
 
   Future<void> _pickImage(int slotIndex) async {
