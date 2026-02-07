@@ -21,18 +21,23 @@ class _DisposalChatScreenState extends State<DisposalChatScreen> {
   final _picker = ImagePicker();
   final _messageController = TextEditingController();
   final _scrollController = ScrollController();
+  final _locationController = TextEditingController();
+  final _contactController = TextEditingController();
 
   String? _chatRoomId;
   bool _isLoading = true;
   bool _isUploading = false;
+  bool _isSubmitting = false;
 
   // 폼 상태
   List<String> _uploadedPhotos = [];
-  String? _purchaseMethod;
-  String? _defects;
-  String? _location;
-  String? _contact;
+  List<String?> _photoSlots = [null, null, null]; // 3개 슬롯
+  String _purchaseMethod = '카드/현금';
+  List<String> _selectedDefects = [];
+  bool _privacyAgreed = false;
   bool _isSubmitted = false;
+
+  final List<String> _defectOptions = ['가죽 해짐', '롤러 이상', '외관 스크래치', '에어불량', '기타'];
 
   @override
   void initState() {
@@ -42,7 +47,10 @@ class _DisposalChatScreenState extends State<DisposalChatScreen> {
 
   Future<void> _initChatRoom() async {
     final user = _auth.currentUser;
-    if (user == null) return;
+    if (user == null) {
+      setState(() => _isLoading = false);
+      return;
+    }
 
     // 기존 처분신청 채팅방 찾기
     final existingRoom = await _firestore
@@ -50,84 +58,33 @@ class _DisposalChatScreenState extends State<DisposalChatScreen> {
         .where('userId', isEqualTo: user.uid)
         .where('type', isEqualTo: 'disposal')
         .where('status', whereIn: ['pending', 'inProgress'])
+        .orderBy('createdAt', descending: true)
         .limit(1)
         .get();
 
     if (existingRoom.docs.isNotEmpty) {
-      _chatRoomId = existingRoom.docs.first.id;
-      final data = existingRoom.docs.first.data();
+      final doc = existingRoom.docs.first;
+      _chatRoomId = doc.id;
+      final data = doc.data();
       _isSubmitted = data['formSubmitted'] ?? false;
-    } else {
-      // 새 채팅방 생성
-      final newRoom = await _firestore.collection('chats').add({
-        'userId': user.uid,
-        'type': 'disposal',
-        'status': 'pending',
-        'formSubmitted': false,
-        'formData': {},
-        'createdAt': FieldValue.serverTimestamp(),
-        'lastMessage': '',
-        'lastMessageTime': FieldValue.serverTimestamp(),
-      });
-      _chatRoomId = newRoom.id;
 
-      // 환영 메시지
-      await _addBotMessage('안녕하세요! RESIT 안마의자 처분 서비스입니다 😊');
-      await Future.delayed(const Duration(milliseconds: 500));
-      await _addBotMessage('안마의자 사진 3장을 올려주시면\n1일 이내로 견적을 안내해 드립니다.');
-      await Future.delayed(const Duration(milliseconds: 300));
-      await _addBotMessage('📷 아래 버튼을 눌러 사진을 업로드해주세요.\n(측면, 등가죽, 다리 부분)');
+      // 기존 폼 데이터 복원
+      if (data['formData'] != null) {
+        final formData = data['formData'] as Map<String, dynamic>;
+        _uploadedPhotos = List<String>.from(formData['photos'] ?? []);
+        _photoSlots = List<String?>.from(_uploadedPhotos);
+        while (_photoSlots.length < 3) _photoSlots.add(null);
+        _purchaseMethod = formData['purchaseMethod'] ?? '카드/현금';
+        _selectedDefects = List<String>.from(formData['defects'] ?? []);
+        _locationController.text = formData['location'] ?? '';
+        _contactController.text = formData['contact'] ?? '';
+      }
     }
 
     setState(() => _isLoading = false);
   }
 
-  Future<void> _addBotMessage(String content) async {
-    await _firestore
-        .collection('chats')
-        .doc(_chatRoomId)
-        .collection('messages')
-        .add({
-      'senderId': 'bot',
-      'content': content,
-      'type': 'text',
-      'timestamp': FieldValue.serverTimestamp(),
-    });
-
-    await _firestore.collection('chats').doc(_chatRoomId).update({
-      'lastMessage': content,
-      'lastMessageTime': FieldValue.serverTimestamp(),
-    });
-  }
-
-  Future<void> _addUserMessage(String content, {String type = 'text', String? imageUrl}) async {
-    final user = _auth.currentUser;
-    await _firestore
-        .collection('chats')
-        .doc(_chatRoomId)
-        .collection('messages')
-        .add({
-      'senderId': user?.uid ?? 'user',
-      'content': content,
-      'type': type,
-      'imageUrl': imageUrl,
-      'timestamp': FieldValue.serverTimestamp(),
-    });
-
-    await _firestore.collection('chats').doc(_chatRoomId).update({
-      'lastMessage': content,
-      'lastMessageTime': FieldValue.serverTimestamp(),
-    });
-  }
-
-  Future<void> _pickAndUploadImage() async {
-    if (_uploadedPhotos.length >= 3) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('사진은 최대 3장까지 업로드 가능합니다')),
-      );
-      return;
-    }
-
+  Future<void> _pickImage(int slotIndex) async {
     try {
       final XFile? image = await _picker.pickImage(
         source: ImageSource.gallery,
@@ -140,9 +97,9 @@ class _DisposalChatScreenState extends State<DisposalChatScreen> {
 
       setState(() => _isUploading = true);
 
-      // Firebase Storage에 업로드
-      final fileName = '${DateTime.now().millisecondsSinceEpoch}.jpg';
-      final ref = _storage.ref().child('disposal/$_chatRoomId/$fileName');
+      final user = _auth.currentUser;
+      final fileName = '${DateTime.now().millisecondsSinceEpoch}_$slotIndex.jpg';
+      final ref = _storage.ref().child('disposal/${user?.uid}/$fileName');
 
       String downloadUrl;
       if (kIsWeb) {
@@ -153,22 +110,11 @@ class _DisposalChatScreenState extends State<DisposalChatScreen> {
       }
       downloadUrl = await ref.getDownloadURL();
 
-      _uploadedPhotos.add(downloadUrl);
-
-      // 메시지로 추가
-      await _addUserMessage('📷 사진 ${_uploadedPhotos.length}/3', type: 'image', imageUrl: downloadUrl);
-
-      // 3장 다 올렸으면 다음 단계
-      if (_uploadedPhotos.length == 3) {
-        await Future.delayed(const Duration(milliseconds: 500));
-        await _addBotMessage('사진이 모두 등록되었습니다! ✅');
-        await Future.delayed(const Duration(milliseconds: 300));
-        await _addBotMessage('구매 방법을 선택해주세요:');
-        await _addBotMessage('[선택] 카드/현금 | 렌탈 만료 | 렌탈 계약 중');
-      }
-
-      setState(() => _isUploading = false);
-      _scrollToBottom();
+      setState(() {
+        _photoSlots[slotIndex] = downloadUrl;
+        _uploadedPhotos = _photoSlots.whereType<String>().toList();
+        _isUploading = false;
+      });
     } catch (e) {
       setState(() => _isUploading = false);
       if (mounted) {
@@ -179,76 +125,142 @@ class _DisposalChatScreenState extends State<DisposalChatScreen> {
     }
   }
 
-  Future<void> _selectPurchaseMethod(String method) async {
-    _purchaseMethod = method;
-    await _addUserMessage(method);
+  Future<void> _submitForm() async {
+    // 유효성 검사
+    if (_uploadedPhotos.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('사진을 최소 1장 이상 업로드해주세요')),
+      );
+      return;
+    }
+    if (_locationController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('수거 지역을 입력해주세요')),
+      );
+      return;
+    }
+    if (_contactController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('연락처를 입력해주세요')),
+      );
+      return;
+    }
+    if (!_privacyAgreed) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('개인정보 수집/이용에 동의해주세요')),
+      );
+      return;
+    }
 
-    await Future.delayed(const Duration(milliseconds: 300));
-    await _addBotMessage('하자 여부를 알려주세요:');
-    await _addBotMessage('[선택] 없음 | 가죽 해짐 | 롤러 이상 | 외관 스크래치');
+    setState(() => _isSubmitting = true);
 
-    _scrollToBottom();
-  }
+    try {
+      final user = _auth.currentUser;
+      if (user == null) return;
 
-  Future<void> _selectDefects(String defects) async {
-    _defects = defects;
-    await _addUserMessage(defects);
+      final formData = {
+        'photos': _uploadedPhotos,
+        'purchaseMethod': _purchaseMethod,
+        'defects': _selectedDefects,
+        'location': _locationController.text.trim(),
+        'contact': _contactController.text.trim(),
+        'submittedAt': FieldValue.serverTimestamp(),
+      };
 
-    await Future.delayed(const Duration(milliseconds: 300));
-    await _addBotMessage('수거 지역을 입력해주세요:');
-    await _addBotMessage('(예: 서울 강남구)');
+      // 채팅방 생성 또는 업데이트
+      if (_chatRoomId == null) {
+        final newRoom = await _firestore.collection('chats').add({
+          'userId': user.uid,
+          'type': 'disposal',
+          'status': 'inProgress',
+          'formSubmitted': true,
+          'formData': formData,
+          'createdAt': FieldValue.serverTimestamp(),
+          'lastMessage': '처분 신청이 접수되었습니다',
+          'lastMessageTime': FieldValue.serverTimestamp(),
+        });
+        _chatRoomId = newRoom.id;
+      } else {
+        await _firestore.collection('chats').doc(_chatRoomId).update({
+          'formSubmitted': true,
+          'status': 'inProgress',
+          'formData': formData,
+          'lastMessage': '처분 신청이 접수되었습니다',
+          'lastMessageTime': FieldValue.serverTimestamp(),
+        });
+      }
 
-    _scrollToBottom();
+      // 시스템 메시지 추가
+      await _firestore
+          .collection('chats')
+          .doc(_chatRoomId)
+          .collection('messages')
+          .add({
+        'senderId': 'system',
+        'content': '처분 신청이 접수되었습니다',
+        'type': 'system',
+        'timestamp': FieldValue.serverTimestamp(),
+      });
+
+      // 신청 내용 요약 메시지
+      final defectsText = _selectedDefects.isEmpty ? '없음' : _selectedDefects.join(', ');
+      await _firestore
+          .collection('chats')
+          .doc(_chatRoomId)
+          .collection('messages')
+          .add({
+        'senderId': 'bot',
+        'content': '''📋 신청 내용
+• 사진: ${_uploadedPhotos.length}장
+• 구매방법: $_purchaseMethod
+• 하자: $defectsText
+• 수거지역: ${_locationController.text.trim()}
+• 연락처: ${_contactController.text.trim()}
+
+1일 이내로 견적을 안내해 드리겠습니다.
+궁금하신 점이 있으시면 메시지를 남겨주세요!''',
+        'type': 'text',
+        'timestamp': FieldValue.serverTimestamp(),
+      });
+
+      setState(() {
+        _isSubmitted = true;
+        _isSubmitting = false;
+      });
+    } catch (e) {
+      setState(() => _isSubmitting = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('신청 실패: $e')),
+        );
+      }
+    }
   }
 
   Future<void> _sendMessage() async {
     final text = _messageController.text.trim();
-    if (text.isEmpty) return;
+    if (text.isEmpty || _chatRoomId == null) return;
 
     _messageController.clear();
 
-    // 현재 단계에 따라 처리
-    if (_uploadedPhotos.length == 3 && _purchaseMethod != null && _defects != null && _location == null) {
-      _location = text;
-      await _addUserMessage(text);
-
-      await Future.delayed(const Duration(milliseconds: 300));
-      await _addBotMessage('연락처를 입력해주세요:');
-      await _addBotMessage('(예: 010-1234-5678)');
-    } else if (_location != null && _contact == null) {
-      _contact = text;
-      await _addUserMessage(text);
-
-      // 신청 완료 처리
-      await _submitApplication();
-    } else {
-      // 일반 메시지
-      await _addUserMessage(text);
-    }
-
-    _scrollToBottom();
-  }
-
-  Future<void> _submitApplication() async {
-    await _firestore.collection('chats').doc(_chatRoomId).update({
-      'formSubmitted': true,
-      'status': 'inProgress',
-      'formData': {
-        'photos': _uploadedPhotos,
-        'purchaseMethod': _purchaseMethod,
-        'defects': _defects,
-        'location': _location,
-        'contact': _contact,
-        'submittedAt': FieldValue.serverTimestamp(),
-      },
+    final user = _auth.currentUser;
+    await _firestore
+        .collection('chats')
+        .doc(_chatRoomId)
+        .collection('messages')
+        .add({
+      'senderId': user?.uid ?? 'user',
+      'content': text,
+      'type': 'text',
+      'timestamp': FieldValue.serverTimestamp(),
     });
 
-    await Future.delayed(const Duration(milliseconds: 500));
-    await _addBotMessage('🎉 처분 신청이 완료되었습니다!');
-    await Future.delayed(const Duration(milliseconds: 300));
-    await _addBotMessage('1일 이내로 견적을 안내해 드리겠습니다.\n궁금하신 점이 있으시면 언제든 메시지를 남겨주세요.');
+    await _firestore.collection('chats').doc(_chatRoomId).update({
+      'lastMessage': text,
+      'lastMessageTime': FieldValue.serverTimestamp(),
+    });
 
-    setState(() => _isSubmitted = true);
+    _scrollToBottom();
   }
 
   void _scrollToBottom() {
@@ -267,6 +279,8 @@ class _DisposalChatScreenState extends State<DisposalChatScreen> {
   void dispose() {
     _messageController.dispose();
     _scrollController.dispose();
+    _locationController.dispose();
+    _contactController.dispose();
     super.dispose();
   }
 
@@ -276,6 +290,499 @@ class _DisposalChatScreenState extends State<DisposalChatScreen> {
       return const Center(child: CircularProgressIndicator());
     }
 
+    // 제출 완료 후: 채팅 모드
+    if (_isSubmitted) {
+      return _buildChatMode();
+    }
+
+    // 제출 전: 폼 모드
+    return _buildFormMode();
+  }
+
+  // ==================== 폼 모드 ====================
+  Widget _buildFormMode() {
+    return Column(
+      children: [
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              _buildFormCard(),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFormCard() {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFFE8F4FD),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 헤더
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  const Color(0xFFE8F4FD),
+                  const Color(0xFFF0F8FF),
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(16),
+                topRight: Radius.circular(16),
+              ),
+            ),
+            child: Row(
+              children: [
+                Image.asset(
+                  'assets/images/resit-icon.png',
+                  width: 40,
+                  height: 40,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '30초 만에 안마의자 처리하기',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppColors.primary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      RichText(
+                        text: TextSpan(
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.black,
+                            height: 1.4,
+                          ),
+                          children: [
+                            const TextSpan(text: '사진 올려주시면 '),
+                            TextSpan(
+                              text: '1일 이내',
+                              style: TextStyle(color: AppColors.primary),
+                            ),
+                            const TextSpan(text: ' 연락드립니다'),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // 사진 업로드
+          Container(
+            margin: const EdgeInsets.symmetric(horizontal: 16),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppColors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.grey200),
+            ),
+            child: Column(
+              children: [
+                Text(
+                  '안마의자 상태 사진 등록',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.grey800,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    _buildPhotoSlot(0, '측면', 'assets/images/chair-side.png'),
+                    const SizedBox(width: 8),
+                    _buildPhotoSlot(1, '등가죽', 'assets/images/chair-back.png'),
+                    const SizedBox(width: 8),
+                    _buildPhotoSlot(2, '다리부', 'assets/images/chair-leg.png'),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '⚠️ 하자 부위가 있다면 함께 찍어주세요',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: AppColors.grey500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // 폼 필드들
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Column(
+              children: [
+                // 구매 방법
+                _buildFormField(
+                  '구매 방법',
+                  Wrap(
+                    spacing: 8,
+                    children: [
+                      _buildRadioChip('카드/현금', _purchaseMethod == '카드/현금', () {
+                        setState(() => _purchaseMethod = '카드/현금');
+                      }),
+                      _buildRadioChip('렌탈 만료', _purchaseMethod == '렌탈 만료', () {
+                        setState(() => _purchaseMethod = '렌탈 만료');
+                      }),
+                      _buildRadioChip('렌탈 계약 중', _purchaseMethod == '렌탈 계약 중', () {
+                        setState(() => _purchaseMethod = '렌탈 계약 중');
+                      }),
+                    ],
+                  ),
+                ),
+
+                // 하자 여부
+                _buildFormField(
+                  '하자 여부',
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: _defectOptions.map((defect) {
+                      final isSelected = _selectedDefects.contains(defect);
+                      return _buildSelectableChip(defect, isSelected, () {
+                        setState(() {
+                          if (isSelected) {
+                            _selectedDefects.remove(defect);
+                          } else {
+                            _selectedDefects.add(defect);
+                          }
+                        });
+                      });
+                    }).toList(),
+                  ),
+                ),
+
+                // 수거 지역
+                _buildFormField(
+                  '수거 지역',
+                  TextField(
+                    controller: _locationController,
+                    style: const TextStyle(fontSize: 14),
+                    decoration: InputDecoration(
+                      hintText: '예: 서울 강남구',
+                      hintStyle: TextStyle(color: AppColors.grey400),
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                      border: InputBorder.none,
+                    ),
+                  ),
+                ),
+
+                // 연락처
+                _buildFormField(
+                  '연락처',
+                  TextField(
+                    controller: _contactController,
+                    keyboardType: TextInputType.phone,
+                    style: const TextStyle(fontSize: 14),
+                    decoration: InputDecoration(
+                      hintText: '예: 010-1234-5678',
+                      hintStyle: TextStyle(color: AppColors.grey400),
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                      border: InputBorder.none,
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 12),
+
+                // 개인정보 동의
+                Row(
+                  children: [
+                    SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: Checkbox(
+                        value: _privacyAgreed,
+                        onChanged: (v) => setState(() => _privacyAgreed = v ?? false),
+                        shape: const CircleBorder(),
+                        activeColor: AppColors.primary,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      '개인정보 수집/이용 동의',
+                      style: TextStyle(fontSize: 13, color: AppColors.grey800),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      '보기 ▼',
+                      style: TextStyle(fontSize: 12, color: AppColors.primary),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+
+                // 제출 버튼
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: ElevatedButton(
+                    onPressed: _isSubmitting ? null : _submitForm,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF7C4DFF),
+                      foregroundColor: AppColors.white,
+                      disabledBackgroundColor: const Color(0xFF7C4DFF).withValues(alpha: 0.5),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      elevation: 0,
+                    ),
+                    child: _isSubmitting
+                        ? const SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2.5,
+                            ),
+                          )
+                        : const Text(
+                            '안마의자 처분 신청',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPhotoSlot(int index, String label, String placeholderPath) {
+    final photoUrl = _photoSlots[index];
+    final hasPhoto = photoUrl != null;
+
+    return Expanded(
+      child: GestureDetector(
+        onTap: _isUploading ? null : () => _pickImage(index),
+        child: Column(
+          children: [
+            AspectRatio(
+              aspectRatio: 1,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: AppColors.grey100,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: AppColors.grey200),
+                ),
+                child: hasPhoto
+                    ? ClipRRect(
+                        borderRadius: BorderRadius.circular(10),
+                        child: Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            Image.network(
+                              photoUrl,
+                              fit: BoxFit.cover,
+                              loadingBuilder: (context, child, loadingProgress) {
+                                if (loadingProgress == null) return child;
+                                return Center(
+                                  child: CircularProgressIndicator(
+                                    value: loadingProgress.expectedTotalBytes != null
+                                        ? loadingProgress.cumulativeBytesLoaded /
+                                            loadingProgress.expectedTotalBytes!
+                                        : null,
+                                    strokeWidth: 2,
+                                  ),
+                                );
+                              },
+                            ),
+                            Positioned(
+                              top: 4,
+                              right: 4,
+                              child: GestureDetector(
+                                onTap: () {
+                                  setState(() {
+                                    _photoSlots[index] = null;
+                                    _uploadedPhotos = _photoSlots.whereType<String>().toList();
+                                  });
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.all(4),
+                                  decoration: BoxDecoration(
+                                    color: Colors.black54,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(
+                                    Icons.close,
+                                    size: 14,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    : Stack(
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(10),
+                            child: Opacity(
+                              opacity: 0.3,
+                              child: Image.asset(
+                                placeholderPath,
+                                fit: BoxFit.cover,
+                                width: double.infinity,
+                                height: double.infinity,
+                              ),
+                            ),
+                          ),
+                          Center(
+                            child: _isUploading
+                                ? const SizedBox(
+                                    width: 24,
+                                    height: 24,
+                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                  )
+                                : Stack(
+                                    clipBehavior: Clip.none,
+                                    children: [
+                                      Icon(
+                                        Icons.camera_alt_outlined,
+                                        size: 28,
+                                        color: AppColors.grey500,
+                                      ),
+                                      Positioned(
+                                        right: -6,
+                                        top: -6,
+                                        child: Container(
+                                          width: 16,
+                                          height: 16,
+                                          decoration: BoxDecoration(
+                                            color: AppColors.grey500,
+                                            shape: BoxShape.circle,
+                                          ),
+                                          child: const Icon(
+                                            Icons.add,
+                                            size: 12,
+                                            color: AppColors.white,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                          ),
+                        ],
+                      ),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              label,
+              style: TextStyle(fontSize: 11, color: AppColors.grey600),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFormField(String label, Widget content) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: AppColors.grey200)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 70,
+            child: Text(
+              label,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: AppColors.black,
+              ),
+            ),
+          ),
+          Expanded(child: content),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRadioChip(String label, bool selected, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: selected ? AppColors.primary.withValues(alpha: 0.1) : AppColors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: selected ? AppColors.primary : AppColors.grey300,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            color: selected ? AppColors.primary : AppColors.grey700,
+            fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSelectableChip(String label, bool selected, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: selected ? AppColors.primary.withValues(alpha: 0.1) : AppColors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: selected ? AppColors.primary : AppColors.grey300,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            color: selected ? AppColors.primary : AppColors.grey700,
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ==================== 채팅 모드 ====================
+  Widget _buildChatMode() {
     return Column(
       children: [
         // 헤더
@@ -316,14 +823,32 @@ class _DisposalChatScreenState extends State<DisposalChatScreen> {
                       const SizedBox(width: 4),
                       Text(
                         '상담 가능',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: AppColors.grey600,
-                        ),
+                        style: TextStyle(fontSize: 12, color: AppColors.grey600),
                       ),
                     ],
                   ),
                 ],
+              ),
+              const Spacer(),
+              // 새 신청 버튼
+              TextButton(
+                onPressed: () {
+                  setState(() {
+                    _isSubmitted = false;
+                    _chatRoomId = null;
+                    _uploadedPhotos = [];
+                    _photoSlots = [null, null, null];
+                    _purchaseMethod = '카드/현금';
+                    _selectedDefects = [];
+                    _locationController.clear();
+                    _contactController.clear();
+                    _privacyAgreed = false;
+                  });
+                },
+                child: Text(
+                  '새 신청',
+                  style: TextStyle(color: AppColors.primary, fontSize: 14),
+                ),
               ),
             ],
           ),
@@ -363,87 +888,9 @@ class _DisposalChatScreenState extends State<DisposalChatScreen> {
           ),
         ),
 
-        // 선택 버튼들 (상황에 따라)
-        _buildActionButtons(),
-
         // 입력창
-        _buildInputBar(),
+        _buildChatInputBar(),
       ],
-    );
-  }
-
-  Widget _buildActionButtons() {
-    // 사진 업로드 버튼
-    if (_uploadedPhotos.length < 3) {
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        child: SizedBox(
-          width: double.infinity,
-          child: ElevatedButton.icon(
-            onPressed: _isUploading ? null : _pickAndUploadImage,
-            icon: _isUploading
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                  )
-                : const Icon(Icons.camera_alt),
-            label: Text(_isUploading ? '업로드 중...' : '사진 업로드 (${_uploadedPhotos.length}/3)'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 12),
-            ),
-          ),
-        ),
-      );
-    }
-
-    // 구매 방법 선택
-    if (_uploadedPhotos.length == 3 && _purchaseMethod == null) {
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        child: Wrap(
-          spacing: 8,
-          children: [
-            _buildChoiceButton('카드/현금', () => _selectPurchaseMethod('카드/현금')),
-            _buildChoiceButton('렌탈 만료', () => _selectPurchaseMethod('렌탈 만료')),
-            _buildChoiceButton('렌탈 계약 중', () => _selectPurchaseMethod('렌탈 계약 중')),
-          ],
-        ),
-      );
-    }
-
-    // 하자 선택
-    if (_purchaseMethod != null && _defects == null) {
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        child: Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            _buildChoiceButton('없음', () => _selectDefects('없음')),
-            _buildChoiceButton('가죽 해짐', () => _selectDefects('가죽 해짐')),
-            _buildChoiceButton('롤러 이상', () => _selectDefects('롤러 이상')),
-            _buildChoiceButton('외관 스크래치', () => _selectDefects('외관 스크래치')),
-          ],
-        ),
-      );
-    }
-
-    return const SizedBox.shrink();
-  }
-
-  Widget _buildChoiceButton(String label, VoidCallback onTap) {
-    return ElevatedButton(
-      onPressed: onTap,
-      style: ElevatedButton.styleFrom(
-        backgroundColor: AppColors.white,
-        foregroundColor: AppColors.primary,
-        side: BorderSide(color: AppColors.primary),
-        elevation: 0,
-      ),
-      child: Text(label),
     );
   }
 
@@ -452,12 +899,31 @@ class _DisposalChatScreenState extends State<DisposalChatScreen> {
     final senderId = data['senderId'] as String? ?? '';
     final content = data['content'] as String? ?? '';
     final type = data['type'] as String? ?? 'text';
-    final imageUrl = data['imageUrl'] as String?;
     final timestamp = data['timestamp'] as Timestamp?;
 
     final isMe = senderId == currentUserId;
+    final isSystem = type == 'system' || senderId == 'system';
     final isBot = senderId == 'bot';
     final isAdmin = senderId == 'admin';
+
+    if (isSystem) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Center(
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: AppColors.grey100,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              content,
+              style: TextStyle(fontSize: 12, color: AppColors.grey600),
+            ),
+          ),
+        ),
+      );
+    }
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
@@ -483,48 +949,25 @@ class _DisposalChatScreenState extends State<DisposalChatScreen> {
                     padding: const EdgeInsets.only(bottom: 4),
                     child: Text(
                       isAdmin ? 'RESIT 상담사' : 'RESIT',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: AppColors.grey600,
-                      ),
+                      style: TextStyle(fontSize: 12, color: AppColors.grey600),
                     ),
                   ),
 
-                if (type == 'image' && imageUrl != null)
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: Image.network(
-                      imageUrl,
-                      width: 150,
-                      height: 150,
-                      fit: BoxFit.cover,
-                      loadingBuilder: (context, child, loadingProgress) {
-                        if (loadingProgress == null) return child;
-                        return Container(
-                          width: 150,
-                          height: 150,
-                          color: AppColors.grey100,
-                          child: const Center(child: CircularProgressIndicator()),
-                        );
-                      },
-                    ),
-                  )
-                else
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                    decoration: BoxDecoration(
-                      color: isMe ? AppColors.primary : const Color(0xFFE8F4FD),
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Text(
-                      content,
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: isMe ? Colors.white : AppColors.black,
-                        height: 1.4,
-                      ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: isMe ? AppColors.primary : const Color(0xFFE8F4FD),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Text(
+                    content,
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: isMe ? Colors.white : AppColors.black,
+                      height: 1.4,
                     ),
                   ),
+                ),
 
                 if (timestamp != null)
                   Padding(
@@ -550,9 +993,7 @@ class _DisposalChatScreenState extends State<DisposalChatScreen> {
     return '$period $displayHour:$minute';
   }
 
-  Widget _buildInputBar() {
-    final showTextInput = _defects != null || _isSubmitted;
-
+  Widget _buildChatInputBar() {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -567,20 +1008,16 @@ class _DisposalChatScreenState extends State<DisposalChatScreen> {
               child: Container(
                 height: 44,
                 decoration: BoxDecoration(
-                  color: showTextInput ? AppColors.white : AppColors.grey100,
                   border: Border.all(color: AppColors.grey300),
                   borderRadius: BorderRadius.circular(22),
                 ),
                 child: TextField(
                   controller: _messageController,
-                  enabled: showTextInput,
                   style: const TextStyle(fontSize: 14),
                   textInputAction: TextInputAction.send,
                   onSubmitted: (_) => _sendMessage(),
                   decoration: InputDecoration(
-                    hintText: showTextInput
-                        ? (_location == null ? '수거 지역 입력' : (_contact == null ? '연락처 입력' : '메시지 입력'))
-                        : '위 버튼을 눌러 진행해주세요',
+                    hintText: '메시지를 입력하세요',
                     hintStyle: TextStyle(color: AppColors.grey400, fontSize: 14),
                     border: InputBorder.none,
                     contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -590,17 +1027,17 @@ class _DisposalChatScreenState extends State<DisposalChatScreen> {
             ),
             const SizedBox(width: 12),
             GestureDetector(
-              onTap: showTextInput ? _sendMessage : null,
+              onTap: _sendMessage,
               child: Container(
                 width: 44,
                 height: 44,
                 decoration: BoxDecoration(
-                  color: showTextInput ? AppColors.primary : AppColors.grey300,
+                  color: AppColors.primary,
                   shape: BoxShape.circle,
                 ),
-                child: Icon(
+                child: const Icon(
                   Icons.arrow_upward,
-                  color: showTextInput ? Colors.white : AppColors.grey500,
+                  color: Colors.white,
                 ),
               ),
             ),
