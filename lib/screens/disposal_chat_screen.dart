@@ -103,6 +103,7 @@ class _DisposalChatScreenState extends State<DisposalChatScreen> {
     }
   }
 
+  // 단일 슬롯 클릭 시 (해당 슬롯만 교체)
   Future<void> _pickImage(int slotIndex) async {
     try {
       final XFile? image = await _picker.pickImage(
@@ -116,24 +117,15 @@ class _DisposalChatScreenState extends State<DisposalChatScreen> {
 
       setState(() => _isUploading = true);
 
-      final user = _auth.currentUser;
-      final fileName = '${DateTime.now().millisecondsSinceEpoch}_$slotIndex.jpg';
-      final ref = _storage.ref().child('disposal/${user?.uid}/$fileName');
-
-      String downloadUrl;
-      if (kIsWeb) {
-        final bytes = await image.readAsBytes();
-        await ref.putData(bytes, SettableMetadata(contentType: 'image/jpeg'));
-      } else {
-        await ref.putFile(File(image.path));
+      final url = await _uploadImage(image, slotIndex);
+      if (url != null) {
+        setState(() {
+          _photoSlots[slotIndex] = url;
+          _uploadedPhotos = _photoSlots.whereType<String>().toList();
+        });
       }
-      downloadUrl = await ref.getDownloadURL();
 
-      setState(() {
-        _photoSlots[slotIndex] = downloadUrl;
-        _uploadedPhotos = _photoSlots.whereType<String>().toList();
-        _isUploading = false;
-      });
+      setState(() => _isUploading = false);
     } catch (e) {
       setState(() => _isUploading = false);
       if (mounted) {
@@ -141,6 +133,81 @@ class _DisposalChatScreenState extends State<DisposalChatScreen> {
           SnackBar(content: Text('업로드 실패: $e')),
         );
       }
+    }
+  }
+
+  // 여러 장 한번에 업로드 (빈 슬롯에 순차 배분)
+  Future<void> _pickMultipleImages() async {
+    try {
+      final List<XFile> images = await _picker.pickMultiImage(
+        maxWidth: 1024,
+        maxHeight: 1024,
+        imageQuality: 85,
+      );
+
+      if (images.isEmpty) return;
+
+      setState(() => _isUploading = true);
+
+      // 빈 슬롯 찾기
+      List<int> emptySlots = [];
+      for (int i = 0; i < 3; i++) {
+        if (_photoSlots[i] == null) {
+          emptySlots.add(i);
+        }
+      }
+
+      // 업로드할 이미지 수 제한
+      final imagesToUpload = images.take(emptySlots.length).toList();
+
+      for (int i = 0; i < imagesToUpload.length; i++) {
+        final slotIndex = emptySlots[i];
+        final url = await _uploadImage(imagesToUpload[i], slotIndex);
+        if (url != null) {
+          setState(() {
+            _photoSlots[slotIndex] = url;
+            _uploadedPhotos = _photoSlots.whereType<String>().toList();
+          });
+        }
+      }
+
+      setState(() => _isUploading = false);
+
+      // 초과된 이미지가 있으면 알림
+      if (images.length > emptySlots.length) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('${emptySlots.length}장만 업로드되었습니다 (최대 3장)')),
+          );
+        }
+      }
+    } catch (e) {
+      setState(() => _isUploading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('업로드 실패: $e')),
+        );
+      }
+    }
+  }
+
+  // 이미지 업로드 공통 함수
+  Future<String?> _uploadImage(XFile image, int slotIndex) async {
+    try {
+      final user = _auth.currentUser;
+      final fileName = '${DateTime.now().millisecondsSinceEpoch}_$slotIndex.jpg';
+      final ref = _storage.ref().child('disposal/${user?.uid}/$fileName');
+
+      if (kIsWeb) {
+        final bytes = await image.readAsBytes();
+        await ref.putData(bytes, SettableMetadata(contentType: 'image/jpeg'));
+      } else {
+        await ref.putFile(File(image.path));
+      }
+      return await ref.getDownloadURL();
+    } catch (e) {
+      debugPrint('이미지 업로드 실패: $e');
+      return null;
     }
   }
 
@@ -417,13 +484,45 @@ class _DisposalChatScreenState extends State<DisposalChatScreen> {
             ),
             child: Column(
               children: [
-                Text(
-                  '안마의자 상태 사진 등록',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.grey800,
-                  ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      '안마의자 상태 사진 등록',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.grey800,
+                      ),
+                    ),
+                    // 여러 장 선택 버튼
+                    if (_photoSlots.any((slot) => slot == null))
+                      GestureDetector(
+                        onTap: _isUploading ? null : _pickMultipleImages,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: AppColors.primary.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.photo_library, size: 14, color: AppColors.primary),
+                              const SizedBox(width: 4),
+                              Text(
+                                '여러 장 선택',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: AppColors.primary,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
                 const SizedBox(height: 12),
                 Row(
