@@ -734,6 +734,22 @@ class _DisposalChatScreenState extends State<DisposalChatScreen> {
                                   ),
                                 );
                               },
+                              errorBuilder: (context, error, stackTrace) {
+                                return Container(
+                                  color: AppColors.grey200,
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(Icons.check_circle, color: AppColors.primary, size: 24),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        '업로드됨',
+                                        style: TextStyle(fontSize: 10, color: AppColors.grey600),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
                             ),
                             Positioned(
                               top: 4,
