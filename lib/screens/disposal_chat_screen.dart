@@ -1,11 +1,29 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
 import '../constants/app_colors.dart';
+
+class PhoneNumberFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(TextEditingValue oldValue, TextEditingValue newValue) {
+    final digits = newValue.text.replaceAll(RegExp(r'[^0-9]'), '');
+    final buffer = StringBuffer();
+    for (int i = 0; i < digits.length && i < 11; i++) {
+      if (i == 3 || i == 7) buffer.write('-');
+      buffer.write(digits[i]);
+    }
+    final formatted = buffer.toString();
+    return TextEditingValue(
+      text: formatted,
+      selection: TextSelection.collapsed(offset: formatted.length),
+    );
+  }
+}
 
 class DisposalChatScreen extends StatefulWidget {
   const DisposalChatScreen({super.key});
@@ -349,6 +367,165 @@ class _DisposalChatScreenState extends State<DisposalChatScreen> {
     _scrollToBottom();
   }
 
+  Future<void> _pickAndSendChatImage() async {
+    try {
+      final XFile? image = await _picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1024,
+        maxHeight: 1024,
+        imageQuality: 85,
+      );
+
+      if (image == null) return;
+      if (_chatRoomId == null) return;
+
+      setState(() => _isUploading = true);
+
+      final user = _auth.currentUser;
+      final fileName = '${DateTime.now().millisecondsSinceEpoch}.jpg';
+      final ref = _storage.ref().child('chat_images/${user?.uid}/$fileName');
+
+      if (kIsWeb) {
+        final bytes = await image.readAsBytes();
+        await ref.putData(bytes, SettableMetadata(contentType: 'image/jpeg'));
+      } else {
+        await ref.putFile(File(image.path));
+      }
+
+      final downloadUrl = await ref.getDownloadURL();
+
+      await _firestore
+          .collection('chats')
+          .doc(_chatRoomId)
+          .collection('messages')
+          .add({
+        'senderId': user?.uid ?? 'user',
+        'content': downloadUrl,
+        'type': 'image',
+        'timestamp': FieldValue.serverTimestamp(),
+      });
+
+      await _firestore.collection('chats').doc(_chatRoomId).update({
+        'lastMessage': '[사진]',
+        'lastMessageTime': FieldValue.serverTimestamp(),
+      });
+
+      setState(() => _isUploading = false);
+      _scrollToBottom();
+    } catch (e) {
+      setState(() => _isUploading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('사진 전송 실패: $e')),
+        );
+      }
+    }
+  }
+
+  void _showFullScreenImage(String imageUrl) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(0),
+        child: Stack(
+          children: [
+            GestureDetector(
+              onTap: () => Navigator.pop(context),
+              child: Container(
+                color: Colors.black87,
+                child: Center(
+                  child: InteractiveViewer(
+                    child: Image.network(
+                      imageUrl,
+                      fit: BoxFit.contain,
+                      loadingBuilder: (context, child, loadingProgress) {
+                        if (loadingProgress == null) return child;
+                        return const Center(
+                          child: CircularProgressIndicator(color: Colors.white),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 8,
+              right: 8,
+              child: IconButton(
+                onPressed: () => Navigator.pop(context),
+                icon: const Icon(Icons.close, color: Colors.white, size: 30),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showPrivacyPolicy() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.7,
+        maxChildSize: 0.9,
+        minChildSize: 0.5,
+        expand: false,
+        builder: (context, scrollController) => Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    '개인정보 수집/이용 동의',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            Expanded(
+              child: SingleChildScrollView(
+                controller: scrollController,
+                padding: const EdgeInsets.all(16),
+                child: const Text(
+                  '''1. 수집하는 개인정보 항목
+- 연락처(휴대폰 번호)
+- 수거/이전 주소
+- 안마의자 사진
+
+2. 개인정보의 수집 및 이용목적
+- 안마의자 처분/이전 서비스 제공
+- 견적 안내 및 상담
+- 서비스 관련 연락
+
+3. 개인정보의 보유 및 이용기간
+- 서비스 완료 후 1년간 보관
+- 관련 법령에 따른 보존기간
+
+4. 동의 거부 권리
+- 개인정보 수집/이용 동의를 거부할 수 있으나, 서비스 이용이 제한될 수 있습니다.''',
+                  style: TextStyle(fontSize: 14, height: 1.8),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _scrollToBottom() {
     Future.delayed(const Duration(milliseconds: 100), () {
       if (_scrollController.hasClients) {
@@ -614,6 +791,7 @@ class _DisposalChatScreenState extends State<DisposalChatScreen> {
                   TextField(
                     controller: _contactController,
                     keyboardType: TextInputType.phone,
+                    inputFormatters: [PhoneNumberFormatter()],
                     style: const TextStyle(fontSize: 14),
                     decoration: InputDecoration(
                       hintText: '예: 010-1234-5678',
@@ -646,9 +824,12 @@ class _DisposalChatScreenState extends State<DisposalChatScreen> {
                       style: TextStyle(fontSize: 13, color: AppColors.grey800),
                     ),
                     const SizedBox(width: 4),
-                    Text(
-                      '보기 ▼',
-                      style: TextStyle(fontSize: 12, color: AppColors.primary),
+                    GestureDetector(
+                      onTap: () => _showPrivacyPolicy(),
+                      child: Text(
+                        '보기 ▼',
+                        style: TextStyle(fontSize: 12, color: AppColors.primary),
+                      ),
                     ),
                   ],
                 ),
@@ -1039,6 +1220,7 @@ class _DisposalChatScreenState extends State<DisposalChatScreen> {
     final isSystem = type == 'system' || senderId == 'system';
     final isBot = senderId == 'bot';
     final isAdmin = senderId == 'admin';
+    final isImage = type == 'image';
 
     if (isSystem) {
       return Padding(
@@ -1087,21 +1269,77 @@ class _DisposalChatScreenState extends State<DisposalChatScreen> {
                     ),
                   ),
 
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: isMe ? AppColors.primary : const Color(0xFFE8F4FD),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Text(
-                    content,
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: isMe ? Colors.white : AppColors.black,
-                      height: 1.4,
+                if (isImage)
+                  GestureDetector(
+                    onTap: () => _showFullScreenImage(content),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 200),
+                        child: Image.network(
+                          content,
+                          fit: BoxFit.cover,
+                          loadingBuilder: (context, child, loadingProgress) {
+                            if (loadingProgress == null) return child;
+                            return Container(
+                              width: 200,
+                              height: 150,
+                              decoration: BoxDecoration(
+                                color: AppColors.grey100,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Center(
+                                child: CircularProgressIndicator(
+                                  value: loadingProgress.expectedTotalBytes != null
+                                      ? loadingProgress.cumulativeBytesLoaded /
+                                          loadingProgress.expectedTotalBytes!
+                                      : null,
+                                  strokeWidth: 2,
+                                ),
+                              ),
+                            );
+                          },
+                          errorBuilder: (context, error, stackTrace) {
+                            return Container(
+                              width: 200,
+                              height: 150,
+                              decoration: BoxDecoration(
+                                color: AppColors.grey200,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.broken_image, color: AppColors.grey500, size: 32),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    '이미지를 불러올 수 없습니다',
+                                    style: TextStyle(fontSize: 11, color: AppColors.grey500),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                  )
+                else
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: isMe ? AppColors.primary : const Color(0xFFE8F4FD),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Text(
+                      content,
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: isMe ? Colors.white : AppColors.black,
+                        height: 1.4,
+                      ),
                     ),
                   ),
-                ),
 
                 if (timestamp != null)
                   Padding(
@@ -1138,6 +1376,28 @@ class _DisposalChatScreenState extends State<DisposalChatScreen> {
         top: false,
         child: Row(
           children: [
+            // 사진 전송 버튼
+            GestureDetector(
+              onTap: _isUploading ? null : _pickAndSendChatImage,
+              child: Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: AppColors.grey100,
+                  shape: BoxShape.circle,
+                ),
+                child: _isUploading
+                    ? const Padding(
+                        padding: EdgeInsets.all(10),
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : Icon(
+                        Icons.photo_outlined,
+                        color: AppColors.grey600,
+                      ),
+              ),
+            ),
+            const SizedBox(width: 8),
             Expanded(
               child: Container(
                 height: 44,

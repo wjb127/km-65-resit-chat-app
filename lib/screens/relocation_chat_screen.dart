@@ -1,11 +1,29 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
 import '../constants/app_colors.dart';
+
+class PhoneNumberFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(TextEditingValue oldValue, TextEditingValue newValue) {
+    final digits = newValue.text.replaceAll(RegExp(r'[^0-9]'), '');
+    final buffer = StringBuffer();
+    for (int i = 0; i < digits.length && i < 11; i++) {
+      if (i == 3 || i == 7) buffer.write('-');
+      buffer.write(digits[i]);
+    }
+    final formatted = buffer.toString();
+    return TextEditingValue(
+      text: formatted,
+      selection: TextSelection.collapsed(offset: formatted.length),
+    );
+  }
+}
 
 class RelocationChatScreen extends StatefulWidget {
   const RelocationChatScreen({super.key});
@@ -345,6 +363,95 @@ class _RelocationChatScreenState extends State<RelocationChatScreen> {
     _scrollToBottom();
   }
 
+  Future<void> _sendChatImage() async {
+    try {
+      final XFile? image = await _picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1024,
+        maxHeight: 1024,
+        imageQuality: 85,
+      );
+      if (image == null) return;
+
+      final user = _auth.currentUser;
+      final fileName = '${DateTime.now().millisecondsSinceEpoch}.jpg';
+      final ref = _storage.ref().child('chat_images/${user?.uid}/$fileName');
+
+      if (kIsWeb) {
+        final bytes = await image.readAsBytes();
+        await ref.putData(bytes, SettableMetadata(contentType: 'image/jpeg'));
+      } else {
+        await ref.putFile(File(image.path));
+      }
+      final url = await ref.getDownloadURL();
+
+      await _firestore
+          .collection('chats')
+          .doc(_chatRoomId)
+          .collection('messages')
+          .add({
+        'senderId': user?.uid ?? 'user',
+        'content': url,
+        'type': 'image',
+        'timestamp': FieldValue.serverTimestamp(),
+      });
+
+      await _firestore.collection('chats').doc(_chatRoomId).update({
+        'lastMessage': '사진을 보냈습니다',
+        'lastMessageTime': FieldValue.serverTimestamp(),
+      });
+
+      _scrollToBottom();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('사진 전송 실패: $e')),
+        );
+      }
+    }
+  }
+
+  void _showPrivacyPolicy() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.7,
+        maxChildSize: 0.9,
+        minChildSize: 0.5,
+        expand: false,
+        builder: (context, scrollController) => Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('개인정보 수집/이용 동의', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                  IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close)),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            Expanded(
+              child: SingleChildScrollView(
+                controller: scrollController,
+                padding: const EdgeInsets.all(16),
+                child: const Text(
+                  '1. 수집하는 개인정보 항목\n- 연락처(휴대폰 번호)\n- 출발지/도착지 주소\n- 안마의자 사진\n\n2. 개인정보의 수집 및 이용목적\n- 안마의자 이전 서비스 제공\n- 견적 안내 및 상담\n- 서비스 관련 연락\n\n3. 개인정보의 보유 및 이용기간\n- 서비스 완료 후 1년간 보관\n- 관련 법령에 따른 보존기간\n\n4. 동의 거부 권리\n- 개인정보 수집/이용 동의를 거부할 수 있으나, 서비스 이용이 제한될 수 있습니다.',
+                  style: TextStyle(fontSize: 14, height: 1.8),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _scrollToBottom() {
     Future.delayed(const Duration(milliseconds: 100), () {
       if (_scrollController.hasClients) {
@@ -618,6 +725,7 @@ class _RelocationChatScreenState extends State<RelocationChatScreen> {
                   TextField(
                     controller: _contactController,
                     keyboardType: TextInputType.phone,
+                    inputFormatters: [PhoneNumberFormatter()],
                     style: const TextStyle(fontSize: 14),
                     decoration: InputDecoration(
                       hintText: '예: 010-1234-5678',
@@ -650,9 +758,12 @@ class _RelocationChatScreenState extends State<RelocationChatScreen> {
                       style: TextStyle(fontSize: 13, color: AppColors.grey800),
                     ),
                     const SizedBox(width: 4),
-                    Text(
-                      '보기 ▼',
-                      style: TextStyle(fontSize: 12, color: const Color(0xFF7C4DFF)),
+                    GestureDetector(
+                      onTap: _showPrivacyPolicy,
+                      child: Text(
+                        '보기 ▼',
+                        style: TextStyle(fontSize: 12, color: const Color(0xFF7C4DFF)),
+                      ),
                     ),
                   ],
                 ),
@@ -1067,19 +1178,44 @@ class _RelocationChatScreenState extends State<RelocationChatScreen> {
                   ),
 
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  padding: type == 'image'
+                      ? const EdgeInsets.all(4)
+                      : const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                   decoration: BoxDecoration(
                     color: isMe ? const Color(0xFF7C4DFF) : const Color(0xFFF5E6FF),
                     borderRadius: BorderRadius.circular(16),
                   ),
-                  child: Text(
-                    content,
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: isMe ? Colors.white : AppColors.black,
-                      height: 1.4,
-                    ),
-                  ),
+                  child: type == 'image'
+                      ? ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: Image.network(
+                            content,
+                            width: 200,
+                            fit: BoxFit.cover,
+                            loadingBuilder: (context, child, loadingProgress) {
+                              if (loadingProgress == null) return child;
+                              return SizedBox(
+                                width: 200,
+                                height: 150,
+                                child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                              );
+                            },
+                            errorBuilder: (_, __, ___) => Container(
+                              width: 200,
+                              height: 150,
+                              color: AppColors.grey200,
+                              child: Icon(Icons.broken_image, color: AppColors.grey400),
+                            ),
+                          ),
+                        )
+                      : Text(
+                          content,
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: isMe ? Colors.white : AppColors.black,
+                            height: 1.4,
+                          ),
+                        ),
                 ),
 
                 if (timestamp != null)
@@ -1117,6 +1253,19 @@ class _RelocationChatScreenState extends State<RelocationChatScreen> {
         top: false,
         child: Row(
           children: [
+            GestureDetector(
+              onTap: _sendChatImage,
+              child: Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  border: Border.all(color: AppColors.grey300),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(Icons.image_outlined, color: AppColors.grey500, size: 22),
+              ),
+            ),
+            const SizedBox(width: 8),
             Expanded(
               child: Container(
                 height: 44,
